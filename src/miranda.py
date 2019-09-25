@@ -205,7 +205,6 @@ class upnp:
 		try:
 			newsock = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP)
 			newsock.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
-			#newsock.setsockopt(IPPROTO_IP, IP_MULTICAST_TTL, 32)
 			# BSD systems also need to set SO_REUSEPORT
 			try:
 				newsock.setsockopt(SOL_SOCKET,SO_REUSEPORT,1)
@@ -307,9 +306,6 @@ class upnp:
 				'NOTIFY' : 'notification',
 				'HTTP/1.1 200 OK' : 'reply'
 		}
-
-		print "in parseSSDPInfo"
-		print data
 
 		#Use the class defaults if these aren't specified
 		if showUniq == False:
@@ -878,12 +874,6 @@ def msearch(argc,argv,hp):
 
 	print "Entering discovery mode for '%s', Ctl+C to stop..." % st
 	print ''
-		
-	#Have to create a new socket since replies will be sent directly to our IP, not the multicast IP
-	server = hp.createNewListener(myip,lport)
-	if server == False:
-		print 'Failed to bind port %d' % lport
-		return
 
 	hp.send(request,False)
 	count = 0
