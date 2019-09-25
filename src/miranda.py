@@ -20,7 +20,16 @@ import struct
 import base64
 import getopt
 import select
+import fcntl
 from socket import *
+
+def get_ip_address(ifname):
+    s = socket(AF_INET, SOCK_DGRAM)
+    return inet_ntoa(fcntl.ioctl(
+        s.fileno(),
+        0x8915,  # SIOCGIFADDR
+        struct.pack('256s', ifname[:15])
+    )[20:24])
 
 # Most of the CmdCompleter class was originally written by John Kenyan
 # It serves to tab-complete commands inside the program's shell
@@ -116,11 +125,14 @@ class upnp:
 
 			#Set up client socket
 			self.csock = socket(AF_INET,SOCK_DGRAM)
-			self.csock.setsockopt(IPPROTO_IP,IP_MULTICAST_TTL,2)
+			self.csock.setsockopt(IPPROTO_IP,IP_MULTICAST_TTL,32)
+			
 			
 			#Set up server socket
-			self.ssock = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP)
-			self.ssock.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
+			self.ssock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+			self.ssock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+			self.ssock.setsockopt(IPPROTO_IP, IP_MULTICAST_TTL, 32) 
+			self.ssock.setsockopt(IPPROTO_IP, IP_MULTICAST_LOOP, 1)
 
 			# BSD systems also need to set SO_REUSEPORT		
 			try:
@@ -128,16 +140,18 @@ class upnp:
 			except:
 				pass
 
-			#Only bind to this interface
-			if self.IFACE != None:
-				print '\nBinding to interface',self.IFACE,'...\n'
-				self.ssock.setsockopt(SOL_SOCKET,IN.SO_BINDTODEVICE,struct.pack("%ds" % (len(self.IFACE)+1,), self.IFACE))
-				self.csock.setsockopt(SOL_SOCKET,IN.SO_BINDTODEVICE,struct.pack("%ds" % (len(self.IFACE)+1,), self.IFACE))
-
 			try:
-				self.ssock.bind(('',self.port))
+				self.ssock.bind((self.ip, self.port))
+				host = gethostbyname(gethostname())
+				if self.IFACE != None:
+					
+					iface_ip = get_ip_address(self.IFACE)
+					print("Binding to %s interface IP: %s" % (self.IFACE, iface_ip))
+  					self.ssock.setsockopt(SOL_IP, IP_MULTICAST_IF, inet_aton(iface_ip))
+  					self.ssock.setsockopt(SOL_IP, IP_ADD_MEMBERSHIP, inet_aton(self.ip) + inet_aton(iface_ip))
 			except Exception, e:
-				print "WARNING: Failed to bind %s:%d: %s" , (self.ip,self.port,e)
+				print "WARNING: Failed to bind %s:%d: %s" % (self.ip,self.port,e)
+				raise e
 			try:
 				self.ssock.setsockopt(IPPROTO_IP,IP_ADD_MEMBERSHIP,self.mreq)
 			except Exception, e:
@@ -191,6 +205,7 @@ class upnp:
 		try:
 			newsock = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP)
 			newsock.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
+			#newsock.setsockopt(IPPROTO_IP, IP_MULTICAST_TTL, 32)
 			# BSD systems also need to set SO_REUSEPORT
 			try:
 				newsock.setsockopt(SOL_SOCKET,SO_REUSEPORT,1)
@@ -292,6 +307,9 @@ class upnp:
 				'NOTIFY' : 'notification',
 				'HTTP/1.1 200 OK' : 'reply'
 		}
+
+		print "in parseSSDPInfo"
+		print data
 
 		#Use the class defaults if these aren't specified
 		if showUniq == False:
@@ -867,7 +885,7 @@ def msearch(argc,argv,hp):
 		print 'Failed to bind port %d' % lport
 		return
 
-	hp.send(request,server)
+	hp.send(request,False)
 	count = 0
 	start = time.time()
 
@@ -879,7 +897,7 @@ def msearch(argc,argv,hp):
 			if hp.TIMEOUT > 0 and (time.time() - start) > hp.TIMEOUT:
 				raise Exception("Timeout exceeded")
 
-			if hp.parseSSDPInfo(hp.recv(1024,server),False,False):
+			if hp.parseSSDPInfo(hp.recv(1024,False),False,False):
 				count += 1
 
 		except Exception, e:
