@@ -40,7 +40,7 @@ then
 elif [ "$(which miranda.py)" != "" ]
 then
 	MIRANDA=miranda.py
-else:
+else
 	MIRANDA=./miranda.py
 fi
 
